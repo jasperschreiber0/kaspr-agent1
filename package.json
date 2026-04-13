@@ -1,0 +1,22 @@
+{
+  "name": "kaspr-agent1",
+  "version": "1.0.0",
+  "description": "Kaspr Content Receiver — Twilio WhatsApp → Supabase queue",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "form-data": "^4.0.0",
+    "openai": "^4.20.0",
+    "twilio": "^4.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
