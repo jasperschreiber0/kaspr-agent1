@@ -8,7 +8,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js"
   },
-"dependencies": {
+  "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",
@@ -17,3 +17,4 @@
     "openai": "^4.28.0",
     "twilio": "^5.0.0"
   }
+}
