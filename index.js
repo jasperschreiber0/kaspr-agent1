@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const webhookRouter = require('./src/webhook');
-
+const stripeWebhookRouter = require('./src/stripeWebhook');
 // Validate required env vars on startup
 const REQUIRED_ENV = [
   'TWILIO_ACCOUNT_SID',
@@ -19,7 +19,7 @@ if (missing.length > 0) {
 }
 
 const app = express();
-
+app.use('/stripe-webhook', stripeWebhookRouter);
 // Parse URL-encoded bodies (Twilio sends form data)
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
