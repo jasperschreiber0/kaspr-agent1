@@ -10,6 +10,9 @@ const REQUIRED_ENV = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_KEY',
   'OPENAI_API_KEY',
+  'STRIPE_SECRET_KEY',
+  'STRIPE_WEBHOOK_SECRET',
+  'RESEND_API_KEY',
 ];
 
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
