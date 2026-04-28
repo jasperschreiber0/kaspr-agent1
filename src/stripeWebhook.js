@@ -4,7 +4,6 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Stripe Price IDs → tier mapping
 const TIER_MAP = {
   [process.env.STRIPE_PRICE_REVIVE]:      'revive',
   [process.env.STRIPE_PRICE_REVIVE_GROW]: 'revive_grow',
@@ -29,14 +28,20 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
   }
 
   if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
+    const sessionRaw = event.data.object;
+
+    // Fetch full session with line items expanded
+    const session = await stripe.checkout.sessions.retrieve(sessionRaw.id, {
+      expand: ['line_items'],
+    });
+
     const email = session.customer_details?.email;
     const name = session.customer_details?.name?.split(' ')[0] || 'there';
-
-    // Detect tier from line items (expand in Stripe dashboard or use metadata)
-    const priceId = session.metadata?.price_id || null;
+    const priceId = session.line_items?.data?.[0]?.price?.id || null;
     const tier = TIER_MAP[priceId] || 'revive';
     const tierLabel = TIER_LABELS[tier];
+
+    console.log('[stripe] Payment from ' + email + ' | tier: ' + tierLabel + ' | priceId: ' + priceId);
 
     // Email 1A — immediate
     try {
@@ -64,7 +69,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       } catch (err) {
         console.error('[stripe] Email 2A failed:', err.message);
       }
-    }, 60 * 60 * 1000); // 1 hour
+    }, 60 * 60 * 1000);
 
     console.log('[stripe] Email 2A queued for ' + email + ' in 1 hour');
   }
@@ -76,7 +81,7 @@ function buildQuestionnaire(name, tier, tierLabel) {
   const socialSection = tier === 'revive' ? '' : `
 ---
 
-**Your platforms**
+Your platforms
 
 9. Which platform are we setting up first?
 (Instagram / TikTok / Both)
@@ -108,7 +113,7 @@ Your business
 (e.g. "Luna Nails — gel nails, nail art, and lash extensions in Surry Hills")
 
 2. Who are your ideal clients?
-(e.g. "Women 25–40, local, book regulars every 3–4 weeks, follow us on Instagram")
+(e.g. "Women 25-40, local, book regulars every 3-4 weeks, follow us on Instagram")
 
 3. What are your most popular services and prices?
 (List your top 5 — this is what Kaspr will use in automations)
@@ -126,11 +131,11 @@ Your voice
 6. How would you describe the way you talk to clients?
 (e.g. "Casual and friendly, lots of emojis", "Professional but warm", "Like talking to a mate")
 
-7. Paste 3–5 examples of DM replies you've sent that felt right.
+7. Paste 3-5 examples of DM replies you've sent that felt right.
 (Just copy and paste from your Instagram or TikTok inbox — exactly as you wrote them)
 
 8. Are there any words, phrases, or tones you want Kaspr to avoid?
-(e.g. "Don't say 'leverage' or 'streamline' — just talk normally")
+(e.g. "Don't say leverage or streamline — just talk normally")
 ${socialSection}
 ---
 
