@@ -1,13 +1,37 @@
 const twilio = require('twilio');
+const { createClient } = require('@supabase/supabase-js');
 
 const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
 );
-
 const FROM = `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`;
 
-async function sendReply(to, message) {
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+async function isSuppressed(phone) {
+  const clean = phone.replace('whatsapp:', '');
+  const { data, error } = await supabase
+    .from('suppressed_contacts')
+    .select('id')
+    .eq('phone', clean)
+    .maybeSingle();
+  if (error) {
+    console.error('[suppression] Lookup failed:', error.message);
+    return false; // fail open — log but don't block on DB error
+  }
+  return !!data;
+}
+
+async function sendReply(to, message, clientId = null) {
+  const suppressed = await isSuppressed(to);
+  if (suppressed) {
+    console.warn('[reply] Suppressed — skipping send to', to);
+    return;
+  }
   try {
     await client.messages.create({
       from: FROM,
@@ -15,32 +39,6 @@ async function sendReply(to, message) {
       body: message,
     });
   } catch (err) {
-    // Non-fatal — log but don't throw
     console.error('[reply] Failed to send WhatsApp reply:', err.message);
   }
 }
-
-const REPLIES = {
-  received: () =>
-    `Got it ✅ We'll have this posted soon!`,
-
-  preview: (instagramCaption, tiktokCaption, scheduledAt) =>
-    `📋 *Caption Preview*\n\n*Instagram:*\n${instagramCaption}\n\n*TikTok:*\n${tiktokCaption}\n\n📅 Scheduled: ${scheduledAt}\n\nReply *GO* to confirm or *EDIT [your changes]* to adjust.`,
-
-  unknown: () =>
-    `Hi! I don't recognise this number. Ask your manager to add you to the Kaspr system.`,
-
-  unsupportedFile: () =>
-    `Sorry, I can only accept photos, videos, or text. Try again! 📸`,
-
-  error: () =>
-    `Something went wrong on our end — we're looking into it. Try sending again in a few minutes.`,
-
-  go: (platform) =>
-    `✅ Locked in! Your post is confirmed for ${platform}.`,
-
-  edited: () =>
-    `Got it — updating the caption now. I'll send a new preview shortly.`,
-};
-
-module.exports = { sendReply, REPLIES };
