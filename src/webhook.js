@@ -23,7 +23,29 @@ router.post('/whatsapp', async (req, res) => {
   try {
     // 1. Identify sender
     const senderResult = await identifySender(from);
+// STOP handler — Australian Spam Act compliance
+if (upperMsg === 'STOP' || upperMsg === 'STOP ALL' || upperMsg === 'UNSUBSCRIBE') {
+  const { createClient } = require('@supabase/supabase-js');
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const cleanPhone = from.replace('whatsapp:', '');
+  const { error } = await supabase
+    .from('suppressed_contacts')
+    .upsert({
+      phone: cleanPhone,
+      client_id: senderResult?.client?.id || null,
+      reason: 'STOP',
+      suppressed_at: new Date().toISOString(),
+    }, { onConflict: 'phone' });
 
+  if (error) console.error('[stop] Failed to write suppression:', error.message);
+  else console.log('[stop] Suppressed:', cleanPhone);
+
+  // Don't reply — Twilio handles the opt-out confirmation automatically
+  return;
+}
     if (!senderResult) {
       console.warn(`[webhook] Unknown sender: ${from}`);
       await sendReply(from, REPLIES.unknown());
