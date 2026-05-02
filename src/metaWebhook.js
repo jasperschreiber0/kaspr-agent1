@@ -51,7 +51,7 @@ router.post('/', async (req, res) => {
       // Look up client by instagram_account_id
       const { data: clientRow, error } = await supabase
         .from('clients')
-        .select('id, business_name, brand_voice, niche, instagram_access_token')
+        .select('id, business_name, brand_voice, niche, instagram_access_token, instagram_account_id')
         .eq('instagram_account_id', igAccountId)
         .maybeSingle();
 
