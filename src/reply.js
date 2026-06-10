@@ -42,3 +42,16 @@ async function sendReply(to, message, clientId = null) {
     console.error('[reply] Failed to send WhatsApp reply:', err.message);
   }
 }
+
+const REPLIES = {
+  unknown: () =>
+    `Hey! This number isn't linked to a Kaspr account yet. If you think that's a mistake, reach out at hello@kaspr.com.au`,
+  received: () =>
+    `Got it! ✅ Your content is in the queue — we'll take it from here.`,
+  unsupportedFile: () =>
+    `Hmm, that file type isn't supported. Send a photo (JPG/PNG), video (MP4/MOV), or voice note and I'll take care of the rest! 📸`,
+  error: () =>
+    `Something went wrong on our end — we're on it. Please try again in a few minutes.`,
+};
+
+module.exports = { sendReply, REPLIES };

@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { handleComment } = require('./igCommentHandler');
 const { handleDm } = require('./igDmHandler');
@@ -29,11 +30,38 @@ router.get('/', (req, res) => {
 });
 
 /**
+ * Verifies Meta's X-Hub-Signature-256 header: sha256 HMAC of the raw
+ * request body, keyed with the app secret.
+ */
+function verifySignature(req) {
+  const signature = req.headers['x-hub-signature-256'];
+  if (!signature || !req.rawBody) return false;
+
+  const expected =
+    'sha256=' +
+    crypto
+      .createHmac('sha256', process.env.META_APP_SECRET)
+      .update(req.rawBody)
+      .digest('hex');
+
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false; // length mismatch
+  }
+}
+
+/**
  * POST /webhook/meta
  * Receives all Instagram events: comments, DMs, mentions, etc.
  * Dispatches to the appropriate handler.
  */
 router.post('/', async (req, res) => {
+  if (!verifySignature(req)) {
+    console.warn('[meta-webhook] Invalid or missing X-Hub-Signature-256 — rejecting');
+    return res.status(403).json({ error: 'Invalid signature' });
+  }
+
   // Acknowledge immediately — Meta expects a fast 200
   res.status(200).send('EVENT_RECEIVED');
 

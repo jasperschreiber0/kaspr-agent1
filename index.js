@@ -32,7 +32,10 @@ const app = express();
  
 app.use('/stripe-webhook', stripeWebhookRouter);
 app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
+// Keep the raw body so the Meta webhook can verify X-Hub-Signature-256
+app.use(express.json({
+  verify: (req, res, buf) => { req.rawBody = buf; },
+}));
  
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', agent: 'kaspr-agent1', ts: new Date().toISOString() });
