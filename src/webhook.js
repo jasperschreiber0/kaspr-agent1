@@ -4,7 +4,8 @@ const { identifySender } = require('./senderAuth');
 const { handleMediaItems, transcribeVoice } = require('./mediaHandler');
 const { writeToQueue, alertError } = require('./queueWriter');
 const { sendReply, REPLIES } = require('./reply');
- 
+const { handleReviewCommand } = require('./reviewRequest');
+
 /**
  * POST /webhook/whatsapp
  * Twilio sends ALL inbound WhatsApp messages here.
@@ -65,7 +66,15 @@ router.post('/whatsapp', async (req, res) => {
       await handleConversationReply(from, client, messageBody, upperMsg);
       return;
     }
- 
+
+    // 3b. Handle REVIEW <customer name> <mobile> — sends a Google review
+    // request SMS to the named customer on the studio's behalf.
+    if (upperMsg.startsWith('REVIEW ')) {
+      const replyText = await handleReviewCommand(client, messageBody);
+      await sendReply(from, replyText);
+      return;
+    }
+
     // 4. Must have media or text
     if (numMedia === 0 && !messageBody) {
       await sendReply(from, `Send a photo, video, or caption and I'll take care of the rest! 📸`);

@@ -1,14 +1,16 @@
 require('dotenv').config();
 const express = require('express');
 const webhookRouter = require('./src/webhook');
+const smsWebhookRouter = require('./src/smsWebhook');
 const stripeWebhookRouter = require('./src/stripeWebhook');
 const metaWebhookRouter = require('./src/metaWebhook');
 const igAuthRouter = require('./src/igAuth'); // ← new
- 
+
 const REQUIRED_ENV = [
   'TWILIO_ACCOUNT_SID',
   'TWILIO_AUTH_TOKEN',
   'TWILIO_WHATSAPP_NUMBER',
+  'TWILIO_SMS_NUMBER',
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'OPENAI_API_KEY',
@@ -39,6 +41,7 @@ app.get('/health', (req, res) => {
 });
  
 app.use('/webhook', webhookRouter);
+app.use('/webhook', smsWebhookRouter);
 app.use('/webhook/meta', metaWebhookRouter);
 app.use('/auth/instagram', igAuthRouter); // ← new
  
@@ -50,6 +53,7 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`[kaspr-agent1] Running on port ${PORT}`);
   console.log(`[kaspr-agent1] Webhook: POST /webhook/whatsapp`);
+  console.log(`[kaspr-agent1] Webhook: POST /webhook/sms`);
   console.log(`[kaspr-agent1] Webhook: POST /webhook/meta`);
   console.log(`[kaspr-agent1] Auth:    GET  /auth/instagram/connect`);
   console.log(`[kaspr-agent1] Auth:    GET  /auth/instagram/callback`);
