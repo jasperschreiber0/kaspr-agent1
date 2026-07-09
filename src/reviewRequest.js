@@ -1,15 +1,5 @@
-const twilio = require('twilio');
 const { createClient } = require('@supabase/supabase-js');
-
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-
-// Dedicated SMS-capable number — WhatsApp Business numbers generally can't
-// send plain SMS, and customers haven't opted into a WhatsApp thread with
-// Kaspr the way staff have, so this rides a separate Twilio number/channel.
-const SMS_FROM = process.env.TWILIO_SMS_NUMBER;
+const { sendSms } = require('./smsSender');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -54,19 +44,6 @@ function normalizeAuMobile(raw) {
   return `+61${national}`;
 }
 
-async function isSuppressed(phone) {
-  const { data, error } = await supabase
-    .from('suppressed_contacts')
-    .select('id')
-    .eq('phone', phone)
-    .maybeSingle();
-  if (error) {
-    console.error('[reviewRequest] Suppression lookup failed:', error.message);
-    return false; // fail open — log but don't block on DB error
-  }
-  return !!data;
-}
-
 /**
  * Best-effort log of a sent review request, for the monthly results
  * report. Requires a `review_requests` table (client_id, customer_name,
@@ -91,11 +68,6 @@ async function logReviewRequest({ clientId, name, phone }) {
  * Returns the message to reply to staff with.
  */
 async function handleReviewCommand(client, messageBody) {
-  if (!SMS_FROM) {
-    console.error('[reviewRequest] TWILIO_SMS_NUMBER not configured');
-    return `Review requests aren't set up yet — message us at contact@kaspr.com.au and we'll get it sorted.`;
-  }
-
   const parsed = parseReviewCommand(messageBody);
   if (!parsed) {
     return `Format: REVIEW <customer name> <mobile>\ne.g. REVIEW Sarah Mitchell 0412345678`;
@@ -112,10 +84,6 @@ async function handleReviewCommand(client, messageBody) {
     return `Your Google review link isn't set up yet — message contact@kaspr.com.au and we'll add it.`;
   }
 
-  if (await isSuppressed(mobile)) {
-    return `${name} (${rawMobile}) has opted out previously — skipped, no message sent.`;
-  }
-
   const firstName = name.split(' ')[0];
   const businessName = client.business_name || client.name || 'us';
   const body =
@@ -123,15 +91,14 @@ async function handleReviewCommand(client, messageBody) {
     `If you had a good experience, a quick Google review would mean the world: ${client.google_review_link}\n\n` +
     `Reply STOP to opt out of future messages.`;
 
-  try {
-    await twilioClient.messages.create({
-      from: SMS_FROM,
-      to: mobile,
-      body,
-    });
-  } catch (err) {
-    console.error('[reviewRequest] Failed to send review SMS:', err.message);
-    return `Couldn't send to ${name} (${rawMobile}) — ${err.message}`;
+  const result = await sendSms(mobile, body);
+
+  if (!result.sent) {
+    if (result.reason === 'suppressed') {
+      return `${name} (${rawMobile}) has opted out previously — skipped, no message sent.`;
+    }
+    console.error(`[reviewRequest] Failed to send review SMS: ${result.reason}`);
+    return `Couldn't send to ${name} (${rawMobile}) — ${result.reason}`;
   }
 
   await logReviewRequest({ clientId: client.id, name, phone: mobile });

@@ -1,7 +1,8 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { sendIgDm } = require('./igDmHandler'); // sendIgDm now lives in igDmHandler
+const { logConversationEvent } = require('./conversationLog');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
- 
+
 /**
  * Called when a new comment is detected on a client's IG post.
  * Sends a brand-voice DM to the commenter to drive toward a booking.
@@ -10,6 +11,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
  * @param {object} value  - Meta webhook change value
  */
 async function handleComment({ client, value }) {
+  const receivedAt = new Date();
   try {
     const commentId = value.id;
     const commentText = value.text || '';
@@ -43,8 +45,17 @@ async function handleComment({ client, value }) {
       recipientId: commenterId,
       message: reply,
     });
- 
+
     console.log(`[comment] DM sent to ${commenterName} (${commenterId})`);
+
+    await logConversationEvent({
+      clientId: client.id,
+      platformSenderId: commenterId,
+      channel: 'comment',
+      inboundText: commentText,
+      replyText: reply,
+      receivedAt,
+    });
   } catch (err) {
     console.error('[comment] Error handling comment:', err.message);
   }

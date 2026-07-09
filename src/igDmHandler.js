@@ -1,6 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const { logConversationEvent } = require('./conversationLog');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
- 
+
 /**
  * Called when a new DM is received on a client's IG account.
  * Generates a brand-voice reply that drives toward a booking.
@@ -9,6 +10,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
  * @param {object} value  - Meta webhook change value (messages field or messaging array entry)
  */
 async function handleDm({ client, value }) {
+  const receivedAt = new Date();
   try {
     const messaging = value.messaging || buildMessagingFromChange(value);
     if (!messaging) {
@@ -48,8 +50,17 @@ async function handleDm({ client, value }) {
       recipientId: senderId,
       message: reply,
     });
- 
+
     console.log(`[dm] Reply sent to ${senderId}`);
+
+    await logConversationEvent({
+      clientId: client.id,
+      platformSenderId: senderId,
+      channel: 'dm',
+      inboundText: messageText,
+      replyText: reply,
+      receivedAt,
+    });
   } catch (err) {
     console.error('[dm] Error handling DM:', err.message);
   }
