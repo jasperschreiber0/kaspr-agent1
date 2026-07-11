@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
+const { verifyTwilioSignature } = require('./twilioAuth');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -13,7 +14,7 @@ const supabase = createClient(
  * replying to a review-request text land on this route. We only care
  * about STOP-style opt-outs; everything else is acknowledged and ignored.
  */
-router.post('/sms', async (req, res) => {
+router.post('/sms', verifyTwilioSignature, async (req, res) => {
   res.status(200).send('<Response></Response>');
 
   const from = (req.body.From || '').trim();
