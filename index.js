@@ -23,33 +23,46 @@ const REQUIRED_ENV = [
   'META_APP_SECRET',  // ← new
   'META_REDIRECT_URI', // ← new
 ];
- 
+
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
 if (missing.length > 0) {
   console.error(`[startup] Missing required env vars: ${missing.join(', ')}`);
   process.exit(1);
 }
- 
+
 const app = express();
- 
+
+// Railway (and most PaaS hosts) sit behind a reverse proxy. Without this,
+// req.protocol always reports "http", which breaks Twilio signature
+// validation (it signs the exact https:// URL it POSTed to) even when the
+// request genuinely came from Twilio over HTTPS.
+app.set('trust proxy', true);
+
 app.use('/stripe-webhook', stripeWebhookRouter);
 app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
- 
+app.use(express.json({
+  verify: (req, res, buf) => {
+    // Meta's X-Hub-Signature-256 is computed over the exact raw request
+    // body — once express.json() parses it into an object, that's gone.
+    // Stash it here so metaAuth.js can verify against the real bytes.
+    req.rawBody = buf;
+  },
+}));
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', agent: 'kaspr-agent1', ts: new Date().toISOString() });
 });
- 
+
 app.use('/webhook', webhookRouter);
 app.use('/webhook', smsWebhookRouter);
 app.use('/webhook', voiceWebhookRouter);
 app.use('/webhook/meta', metaWebhookRouter);
 app.use('/auth/instagram', igAuthRouter); // ← new
- 
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
- 
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`[kaspr-agent1] Running on port ${PORT}`);
