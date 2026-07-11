@@ -1,5 +1,5 @@
 const twilio = require('twilio');
-const { createClient } = require('@supabase/supabase-js');
+const { isSuppressed } = require('./suppression');
 
 const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -7,26 +7,18 @@ const client = twilio(
 );
 const FROM = `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`;
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Canonical WhatsApp reply copy, used by webhook.js.
+const REPLIES = {
+  received: () => `Got it! 📸 Queuing this up now.`,
+  unknown: () =>
+    `Hi! This number isn't set up with Kaspr yet — message contact@kaspr.com.au and we'll get you connected.`,
+  unsupportedFile: () =>
+    `Hmm, I can't read that file type yet. Try a JPG, PNG, MP4, MOV, or a voice note.`,
+  error: () =>
+    `Something went wrong on our end — we've been notified and are looking into it. Try again shortly.`,
+};
 
-async function isSuppressed(phone) {
-  const clean = phone.replace('whatsapp:', '');
-  const { data, error } = await supabase
-    .from('suppressed_contacts')
-    .select('id')
-    .eq('phone', clean)
-    .maybeSingle();
-  if (error) {
-    console.error('[suppression] Lookup failed:', error.message);
-    return false; // fail open — log but don't block on DB error
-  }
-  return !!data;
-}
-
-async function sendReply(to, message, clientId = null) {
+async function sendReply(to, message) {
   const suppressed = await isSuppressed(to);
   if (suppressed) {
     console.warn('[reply] Suppressed — skipping send to', to);
@@ -42,3 +34,5 @@ async function sendReply(to, message, clientId = null) {
     console.error('[reply] Failed to send WhatsApp reply:', err.message);
   }
 }
+
+module.exports = { sendReply, REPLIES };
