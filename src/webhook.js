@@ -5,12 +5,13 @@ const { handleMediaItems, transcribeVoice } = require('./mediaHandler');
 const { writeToQueue, alertError } = require('./queueWriter');
 const { sendReply, REPLIES } = require('./reply');
 const { handleReviewCommand } = require('./reviewRequest');
+const { verifyTwilioSignature } = require('./twilioAuth');
 
 /**
  * POST /webhook/whatsapp
  * Twilio sends ALL inbound WhatsApp messages here.
  */
-router.post('/whatsapp', async (req, res) => {
+router.post('/whatsapp', verifyTwilioSignature, async (req, res) => {
   // Twilio expects a 200 response quickly — acknowledge immediately
   res.status(200).send('<Response></Response>');
  
@@ -186,4 +187,3 @@ async function handleConversationReply(from, client, messageBody, upperMsg) {
 }
  
 module.exports = router;
- 
