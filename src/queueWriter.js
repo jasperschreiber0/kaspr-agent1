@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
+const openclaw = require('./openclaw');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -38,7 +39,17 @@ async function writeToQueue({
 
   console.log(`[queueWriter] Queued item ${data.id} for client ${clientId}`);
 
-  // Emit event to OpenClaw event bus (Supabase Realtime fires automatically)
+  // Emit event to the OpenClaw event bus (agent3 polls this, but also
+  // polls content_queue directly regardless — this is a nudge, not the
+  // only way the item gets picked up).
+  if (contentType !== 'reply_signal') {
+    await openclaw.emit('content.received', {
+      queue_id: data.id,
+      client_id: clientId,
+      content_type: contentType,
+    });
+  }
+
   // Also post to Discord #kaspr-logs
   await notifyDiscord({
     queueId: data.id,
