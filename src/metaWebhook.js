@@ -3,6 +3,7 @@ const router = express.Router();
 const { handleComment } = require('./igCommentHandler');
 const { handleDm } = require('./igDmHandler');
 const { createClient } = require('@supabase/supabase-js');
+const { verifyMetaSignature } = require('./metaAuth');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -12,7 +13,9 @@ const supabase = createClient(
 /**
  * GET /webhook/meta
  * Meta sends a verification challenge when you register the webhook.
- * Responds with hub.challenge to confirm ownership.
+ * Responds with hub.challenge to confirm ownership. No signature to check
+ * here — this handshake has no body, Meta identifies itself via the
+ * shared META_VERIFY_TOKEN instead.
  */
 router.get('/', (req, res) => {
   const mode = req.query['hub.mode'];
@@ -33,7 +36,7 @@ router.get('/', (req, res) => {
  * Receives all Instagram events: comments, DMs, mentions, etc.
  * Dispatches to the appropriate handler.
  */
-router.post('/', async (req, res) => {
+router.post('/', verifyMetaSignature, async (req, res) => {
   // Acknowledge immediately — Meta expects a fast 200
   res.status(200).send('EVENT_RECEIVED');
 
