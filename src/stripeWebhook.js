@@ -4,16 +4,15 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// Matches kaspr-site's components/Pricing.tsx PLANS (Grow / Full Stack).
 const TIER_MAP = {
-  [process.env.STRIPE_PRICE_REVIVE]:      'revive',
-  [process.env.STRIPE_PRICE_REVIVE_GROW]: 'revive_grow',
-  [process.env.STRIPE_PRICE_FULL_STACK]:  'full_stack',
+  [process.env.STRIPE_PRICE_GROW]:       'grow',
+  [process.env.STRIPE_PRICE_FULL_STACK]: 'full_stack',
 };
 
 const TIER_LABELS = {
-  revive:      'Revive',
-  revive_grow: 'Revive + Grow',
-  full_stack:  'Full Stack',
+  grow:       'Grow',
+  full_stack: 'Full Stack',
 };
 
 router.post('/', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -38,7 +37,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     const email = session.customer_details?.email;
     const name = session.customer_details?.name?.split(' ')[0] || 'there';
     const priceId = session.line_items?.data?.[0]?.price?.id || null;
-    const tier = TIER_MAP[priceId] || 'revive';
+    const tier = TIER_MAP[priceId] || 'grow';
     const tierLabel = TIER_LABELS[tier];
 
     console.log('[stripe] Payment from ' + email + ' | tier: ' + tierLabel + ' | priceId: ' + priceId);
@@ -78,7 +77,7 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 });
 
 function buildQuestionnaire(name, tier, tierLabel) {
-  const socialSection = tier === 'revive' ? '' : `
+  const socialSection = `
 ---
 
 Your platforms
