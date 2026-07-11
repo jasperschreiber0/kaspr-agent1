@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 const { sendSms } = require('./smsSender');
+const { verifyTwilioSignature } = require('./twilioAuth');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -35,7 +36,7 @@ async function findClientByVoiceNumber(toNumber) {
  * number. We forward it to the studio's real mobile and let Twilio tell
  * us the outcome via the action callback below.
  */
-router.post('/voice', async (req, res) => {
+router.post('/voice', verifyTwilioSignature, async (req, res) => {
   const to = req.body.To;
   const client = await findClientByVoiceNumber(to);
 
@@ -57,7 +58,7 @@ router.post('/voice', async (req, res) => {
  * (no-answer, busy, failed) means the studio missed the call — text the
  * caller back immediately.
  */
-router.post('/voice-status', async (req, res) => {
+router.post('/voice-status', verifyTwilioSignature, async (req, res) => {
   res.status(200).send('<Response></Response>');
 
   const dialStatus = req.body.DialCallStatus;
