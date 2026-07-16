@@ -1,9 +1,20 @@
 const { createClient } = require('@supabase/supabase-js');
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy singleton: constructing the client at import time makes this
+// module (and anything that requires it) throw the moment it's loaded
+// if SUPABASE_URL isn't set yet — including in tests that never touch
+// the network. Deferring to first use means importing this file is
+// always safe; the client is still built once and reused after that.
+let supabase;
+function getSupabase() {
+  if (!supabase) {
+    supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+  }
+  return supabase;
+}
 
 /**
  * Global (not per-client) suppression check shared by every outbound
@@ -16,7 +27,7 @@ const supabase = createClient(
  */
 async function isSuppressed(phone) {
   const clean = phone.replace('whatsapp:', '').trim();
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('suppressed_contacts')
     .select('id')
     .eq('phone', clean)

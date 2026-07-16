@@ -1,10 +1,18 @@
 const { createClient } = require('@supabase/supabase-js');
 const { sendSms } = require('./smsSender');
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Lazy singleton — see suppression.js for why this isn't built at
+// import time.
+let supabase;
+function getSupabase() {
+  if (!supabase) {
+    supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+  }
+  return supabase;
+}
 
 /**
  * Parse "REVIEW <customer name> <mobile>" (case-insensitive on the keyword).
@@ -51,7 +59,7 @@ function normalizeAuMobile(raw) {
  * instead of blocking the send.
  */
 async function logReviewRequest({ clientId, name, phone }) {
-  const { error } = await supabase.from('review_requests').insert({
+  const { error } = await getSupabase().from('review_requests').insert({
     client_id: clientId,
     customer_name: name,
     customer_phone: phone,
