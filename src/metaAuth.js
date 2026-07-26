@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-
 /**
  * Rejects any POST that doesn't carry a valid X-Hub-Signature-256 header
  * computed with META_APP_SECRET over the raw body. Without this, anyone
@@ -10,11 +9,13 @@ const crypto = require('crypto');
  */
 function verifyMetaSignature(req, res, next) {
   const signature = req.headers['x-hub-signature-256'];
-
   if (!signature || !req.rawBody) {
     console.warn('[meta-auth] Missing signature header or raw body');
     return res.status(403).send('Forbidden');
   }
+
+  console.log('[meta-auth] secret length:', process.env.META_APP_SECRET.length);
+  console.log('[meta-auth] secret raw:', JSON.stringify(process.env.META_APP_SECRET));
 
   const expected =
     'sha256=' +
@@ -22,18 +23,13 @@ function verifyMetaSignature(req, res, next) {
       .createHmac('sha256', process.env.META_APP_SECRET)
       .update(req.rawBody)
       .digest('hex');
-
   const sigBuf = Buffer.from(signature);
   const expBuf = Buffer.from(expected);
-
   const valid = sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf);
-
   if (!valid) {
     console.warn('[meta-auth] Signature mismatch — rejecting');
     return res.status(403).send('Forbidden');
   }
-
   next();
 }
-
 module.exports = { verifyMetaSignature };
