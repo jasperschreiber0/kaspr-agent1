@@ -1,5 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+process.env.SUPABASE_URL = 'https://example.supabase.co';
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test_key';
+process.env.TWILIO_ACCOUNT_SID = 'AC00000000000000000000000000000000';
+process.env.TWILIO_AUTH_TOKEN = 'test_token';
 const { parseReviewCommand, normalizeAuMobile } = require('../src/reviewRequest');
 
 test('parseReviewCommand extracts name and trailing mobile', () => {
