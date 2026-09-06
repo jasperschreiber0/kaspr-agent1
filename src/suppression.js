@@ -11,8 +11,7 @@ const supabase = createClient(
  * client is suppressed for all of them — see the suppressed_contacts
  * migration for why that's deliberate, not a bug.
  *
- * Fails open on a Supabase error: logs it, but returns "not suppressed"
- * rather than blocking sends on an infrastructure hiccup.
+ * Block sending when opt-out status cannot be verified.
  */
 async function isSuppressed(phone) {
   const clean = phone.replace('whatsapp:', '').trim();
@@ -24,7 +23,7 @@ async function isSuppressed(phone) {
 
   if (error) {
     console.error('[suppression] Lookup failed:', error.message);
-    return false;
+    return true;
   }
   return !!data;
 }

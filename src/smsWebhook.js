@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 const { verifyTwilioSignature } = require('./twilioAuth');
+const { recordCustomerReply } = require('./revenueLedger');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -15,12 +16,12 @@ const supabase = createClient(
  * about STOP-style opt-outs; everything else is acknowledged and ignored.
  */
 router.post('/sms', verifyTwilioSignature, async (req, res) => {
-  res.status(200).send('<Response></Response>');
 
   const from = (req.body.From || '').trim();
-  const body = (req.body.Body || '').trim().toUpperCase();
+  const rawBody = (req.body.Body || '').trim();
+  const body = rawBody.toUpperCase();
 
-  if (!from) return;
+  if (!from) return res.status(400).send('Missing sender');
 
   if (body === 'STOP' || body === 'STOP ALL' || body === 'UNSUBSCRIBE') {
     const { error } = await supabase
@@ -35,8 +36,24 @@ router.post('/sms', verifyTwilioSignature, async (req, res) => {
         { onConflict: 'phone' }
       );
 
-    if (error) console.error('[sms-stop] Failed to write suppression:', error.message);
-    else console.log('[sms-stop] Suppressed:', from);
+    if (error) return res.status(503).send('Could not persist opt-out');
+    return res.status(200).type('text/xml').send('<Response></Response>');
+  }
+
+  try {
+    const opportunity = await recordCustomerReply({
+      customerPhone: from,
+      body: rawBody,
+      messageSid: req.body.MessageSid,
+    });
+    if (opportunity) {
+      console.log(`[sms-revenue] Customer reply linked to opportunity ${opportunity.id}`);
+    }
+    res.status(200).type('text/xml').send('<Response></Response>');
+  } catch (error) {
+    // Let Twilio retry after a persistence failure; MessageSid deduplicates it.
+    console.error('[sms-revenue] Failed to record customer reply:', error.message);
+    res.status(503).send('Reply persistence unavailable');
   }
 });
 

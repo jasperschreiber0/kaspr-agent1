@@ -3,6 +3,7 @@ const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 const { sendSms } = require('./smsSender');
 const { verifyTwilioSignature } = require('./twilioAuth');
+const { createMissedCallOpportunity, markOpportunityContacted } = require('./revenueLedger');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -63,9 +64,11 @@ router.post('/voice-status', verifyTwilioSignature, async (req, res) => {
 
   const dialStatus = req.body.DialCallStatus;
   const caller = req.body.From;
+  const callSid = req.body.CallSid;
   const clientId = req.query.clientId;
 
-  if (dialStatus === 'completed') return; // answered — nothing to do
+  if (!['no-answer', 'busy', 'failed', 'canceled'].includes(dialStatus)) return;
+  if (!callSid || !caller || !clientId) return;
 
   const { data: client, error } = await supabase
     .from('clients')
@@ -83,17 +86,40 @@ router.post('/voice-status', verifyTwilioSignature, async (req, res) => {
     `Hey! Sorry we missed your call at ${businessName} 💛 We'll call you back shortly — ` +
     `or reply here and we'll help you out.\n\nReply STOP to opt out.`;
 
-  const result = await sendSms(caller, body);
-
-  const { error: logError } = await supabase.from('missed_calls').insert({
+  const { data: missedCall, error: logError } = await supabase.from('missed_calls').insert({
     client_id: client.id,
     caller_phone: caller,
     dial_status: dialStatus,
-    sms_sent: result.sent,
+    twilio_call_sid: callSid || null,
+    sms_sent: false,
     created_at: new Date().toISOString(),
-  });
+  }).select('id').single();
+  if (logError && logError.code === '23505') {
+    console.log('[voice-status] Duplicate Twilio delivery ignored:', callSid);
+    return;
+  }
   if (logError) {
     console.warn('[voice-status] Could not log missed call (table missing?):', logError.message);
+    return;
+  }
+
+  let opportunity;
+  try {
+    opportunity = await createMissedCallOpportunity({ clientId: client.id, callerPhone: caller, missedCallId: missedCall.id, callSid });
+  } catch (err) {
+    console.error('[voice-status] Could not create revenue opportunity:', err.message);
+    return;
+  }
+
+  const result = await sendSms(caller, body);
+  await supabase.from('missed_calls').update({ sms_sent: result.sent }).eq('id', missedCall.id);
+
+  if (result.sent && opportunity) {
+    try {
+      await markOpportunityContacted(opportunity.id, client.id, { channel: 'sms' });
+    } catch (err) {
+      console.error('[voice-status] Could not record contact event:', err.message);
+    }
   }
 });
 
