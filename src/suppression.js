@@ -29,4 +29,3 @@ async function isSuppressed(phone) {
 }
 
 module.exports = { isSuppressed };
-

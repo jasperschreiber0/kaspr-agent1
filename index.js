@@ -81,4 +81,3 @@ app.listen(PORT, () => {
   console.log(`[kaspr-agent1] Health:  GET  /health`);
   startRecoveryWorker();
 });
-

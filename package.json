@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:database": "node scripts/verify-recovery.mjs && node scripts/verify-rls.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
@@ -20,5 +21,8 @@
     "resend": "^3.2.0",
     "stripe": "^14.21.0",
     "twilio": "^5.0.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
   }
 }
