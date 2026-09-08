@@ -8,6 +8,9 @@ const callbackBase = process.env.PUBLIC_BASE_URL || (process.env.RAILWAY_PUBLIC_
 const runtime = createRecoveryRuntime({ db, sendSms, fetchMessage, callbackBase, autoReply: process.env.RECOVERY_AUTOREPLY_ENABLED === 'true' });
 let lastSuccess = null;
 let failures = 0;
+function workerHealthy() {
+  return lastSuccess !== null && Date.now() - lastSuccess < 120000;
+}
 function startRecoveryWorker({ intervalMs = 5000 } = {}) {
   if (!callbackBase.startsWith('https://')) throw new Error('HTTPS PUBLIC_BASE_URL required');
   let running = false, ticks = 0;
@@ -42,4 +45,4 @@ function startRecoveryWorker({ intervalMs = 5000 } = {}) {
   void tick();
   return timer;
 }
-module.exports = { startRecoveryWorker, workerHealthy: () => lastSuccess !== null && Date.now() - lastSuccess < 120000 };
+module.exports = { startRecoveryWorker, workerHealthy };

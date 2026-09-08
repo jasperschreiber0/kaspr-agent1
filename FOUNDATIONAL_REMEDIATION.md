@@ -1,5 +1,12 @@
 # Foundational remediation — 8 September 2026
 
+Follow-up: deployment 12ad199 later crashed when its delayed watchdog called an
+undefined local workerHealthy function. The follow-up fix defines and exports the
+same health function. Regression tests reproduce the original ReferenceError and
+exercise five minutes of healthy timer ticks and a stalled asynchronous worker.
+Initial health checks alone are insufficient; observe the replacement deployment
+beyond the delayed watchdog interval before recording release success.
+
 Scope: security, recovery transport, cancellation, operator visibility. Builder
 questions, new enquiry models, attachments, handoff UI, Worka and other product
 features remain deferred. Customer recovery stays disabled.
