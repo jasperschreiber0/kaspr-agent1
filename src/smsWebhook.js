@@ -1,60 +1,21 @@
-const express = require('express');
-const router = express.Router();
+const router = require('express').Router();
 const { createClient } = require('@supabase/supabase-js');
 const { verifyTwilioSignature } = require('./twilioAuth');
-const { recordCustomerReply } = require('./revenueLedger');
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-/**
- * POST /webhook/sms
- * Twilio sends inbound SMS replies here — currently only customers
- * replying to a review-request text land on this route. We only care
- * about STOP-style opt-outs; everything else is acknowledged and ignored.
- */
+const { processInboundSms } = require('./salonFlow');
+const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 router.post('/sms', verifyTwilioSignature, async (req, res) => {
-
-  const from = (req.body.From || '').trim();
-  const rawBody = (req.body.Body || '').trim();
-  const body = rawBody.toUpperCase();
-
-  if (!from) return res.status(400).send('Missing sender');
-
-  if (body === 'STOP' || body === 'STOP ALL' || body === 'UNSUBSCRIBE') {
-    const { error } = await supabase
-      .from('suppressed_contacts')
-      .upsert(
-        {
-          phone: from,
-          client_id: null, // unknown at this point — intentional, same as WhatsApp STOP handler
-          reason: 'STOP',
-          suppressed_at: new Date().toISOString(),
-        },
-        { onConflict: 'phone' }
-      );
-
-    if (error) return res.status(503).send('Could not persist opt-out');
-    return res.status(200).type('text/xml').send('<Response></Response>');
-  }
-
   try {
-    const opportunity = await recordCustomerReply({
-      customerPhone: from,
-      body: rawBody,
-      messageSid: req.body.MessageSid,
-    });
-    if (opportunity) {
-      console.log(`[sms-revenue] Customer reply linked to opportunity ${opportunity.id}`);
-    }
-    res.status(200).type('text/xml').send('<Response></Response>');
-  } catch (error) {
-    // Let Twilio retry after a persistence failure; MessageSid deduplicates it.
-    console.error('[sms-revenue] Failed to record customer reply:', error.message);
-    res.status(503).send('Reply persistence unavailable');
-  }
+    await processInboundSms({ messageSid: req.body.MessageSid, from: req.body.From, to: req.body.To, body: req.body.Body });
+    res.type('text/xml').send('<Response/>');
+  } catch { res.status(503).send('Reply persistence unavailable'); }
 });
-
+router.post('/sms-status', verifyTwilioSignature, async (req, res) => {
+  const { error } = await db.rpc('kaspr_delivery_status', {
+    p_id: req.query.outboxId, p_sid: req.body.MessageSid,
+    p_status: req.body.MessageStatus, p_error: req.body.ErrorCode || null,
+  });
+  if (error) return res.status(503).send('Delivery persistence unavailable');
+  console.log(`[recovery-worker] delivery outbox=${req.query.outboxId} status=${req.body.MessageStatus}`);
+  res.sendStatus(204);
+});
 module.exports = router;

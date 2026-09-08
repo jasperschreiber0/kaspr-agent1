@@ -13,8 +13,6 @@ function verifyMetaSignature(req, res, next) {
     console.warn('[meta-auth] Missing signature header or raw body');
     return res.status(403).send('Forbidden');
   }
-console.log('[meta-auth] secret length:', process.env.META_APP_SECRET.length);
-  console.log('[meta-auth] secret raw:', JSON.stringify(process.env.META_APP_SECRET));
   const expected =
     'sha256=' +
     crypto
@@ -22,8 +20,6 @@ console.log('[meta-auth] secret length:', process.env.META_APP_SECRET.length);
       .update(req.rawBody)
       .digest('hex');
 
-  console.log('[meta-auth] received signature:', signature);
-  console.log('[meta-auth] expected signature:', expected);
 
   const sigBuf = Buffer.from(signature);
   const expBuf = Buffer.from(expected);

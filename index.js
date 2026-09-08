@@ -6,11 +6,13 @@ const voiceWebhookRouter = require('./src/voiceWebhook');
 const stripeWebhookRouter = require('./src/stripeWebhook');
 const metaWebhookRouter = require('./src/metaWebhook');
 const igAuthRouter = require('./src/igAuth'); // ← new
+const { startRecoveryWorker, workerHealthy } = require('./src/recoveryWorker');
 
 const REQUIRED_ENV = [
   'TWILIO_ACCOUNT_SID',
   'TWILIO_AUTH_TOKEN',
   'TWILIO_WHATSAPP_NUMBER',
+  'TWILIO_SMS_NUMBER',
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'OPENAI_API_KEY',
@@ -49,8 +51,11 @@ app.use(express.json({
   },
 }));
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', agent: 'kaspr-agent1', ts: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  const db = require('@supabase/supabase-js').createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const { data, error } = await db.rpc('kaspr_recovery_version');
+  const healthy = !error && data === 2 && workerHealthy();
+  res.status(healthy ? 200 : 503).json({ status: healthy ? 'ok' : 'not_ready', agent: 'kaspr-agent1', schema: data, commit: process.env.RAILWAY_GIT_COMMIT_SHA || 'local', worker: workerHealthy() });
 });
 
 app.use('/webhook', webhookRouter);
@@ -74,4 +79,6 @@ app.listen(PORT, () => {
   console.log(`[kaspr-agent1] Auth:    GET  /auth/instagram/connect`);
   console.log(`[kaspr-agent1] Auth:    GET  /auth/instagram/callback`);
   console.log(`[kaspr-agent1] Health:  GET  /health`);
+  startRecoveryWorker();
 });
+

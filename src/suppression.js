@@ -18,7 +18,7 @@ async function isSuppressed(phone) {
   const { data, error } = await supabase
     .from('suppressed_contacts')
     .select('id')
-    .eq('phone', clean)
+    .eq('phone', clean).limit(1)
     .maybeSingle();
 
   if (error) {
@@ -29,3 +29,4 @@ async function isSuppressed(phone) {
 }
 
 module.exports = { isSuppressed };
+

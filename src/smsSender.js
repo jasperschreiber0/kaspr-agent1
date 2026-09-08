@@ -1,38 +1,18 @@
 const twilio = require('twilio');
 const { isSuppressed } = require('./suppression');
-
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-
-/**
- * Send a plain SMS from the shared Kaspr SMS number, honouring the
- * suppression list. Used for anything customer-facing that isn't the
- * staff WhatsApp channel (review requests, missed-call replies).
- */
-async function sendSms(to, body) {
-  if (await isSuppressed(to)) {
-    console.warn('[smsSender] Suppressed — skipping send to', to);
-    return { sent: false, reason: 'suppressed' };
-  }
-
-  if (!process.env.TWILIO_SMS_NUMBER) {
-    console.error('[smsSender] TWILIO_SMS_NUMBER not configured');
-    return { sent: false, reason: 'not_configured' };
-  }
-
-  try {
-    await twilioClient.messages.create({
-      from: process.env.TWILIO_SMS_NUMBER,
-      to,
-      body,
-    });
-    return { sent: true };
-  } catch (err) {
-    console.error('[smsSender] Send failed:', err.message);
-    return { sent: false, reason: err.message };
-  }
+const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN, { autoRetry: false, timeout: 10000 });
+function classifySendError(err) {
+  if (err.status === 429) return { sent: false, outcome: 'retry', code: String(err.code || 429) };
+  if (err.status >= 400 && err.status < 500 && err.status !== 408) return { sent: false, outcome: 'failed', code: String(err.code || err.status) };
+  return { sent: false, outcome: 'uncertain', code: String(err.code || 'transport_unknown') };
 }
-
-module.exports = { sendSms, isSuppressed };
+async function sendSms(to, body, options = {}) {
+  if (await isSuppressed(to)) return { sent: false, outcome: 'suppressed', reason: 'suppressed_or_unavailable' };
+  const from = options.from || process.env.TWILIO_SMS_NUMBER;
+  if (!from) return { sent: false, outcome: 'failed', reason: 'sender_not_configured' };
+  try {
+    const message = await twilioClient.messages.create({ from, to, body, ...(options.statusCallback ? { statusCallback: options.statusCallback } : {}) });
+    return { sent: true, sid: message.sid };
+  } catch (err) { return classifySendError(err); }
+}
+module.exports = { sendSms, isSuppressed, classifySendError, fetchMessage: sid => twilioClient.messages(sid).fetch() };
