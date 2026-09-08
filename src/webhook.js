@@ -6,15 +6,13 @@ const { writeToQueue, alertError } = require('./queueWriter');
 const { sendReply, REPLIES } = require('./reply');
 const { handleReviewCommand } = require('./reviewRequest');
 const { verifyTwilioSignature } = require('./twilioAuth');
+const { processInboundSms } = require('./salonFlow');
 
 /**
  * POST /webhook/whatsapp
  * Twilio sends ALL inbound WhatsApp messages here.
  */
 router.post('/whatsapp', verifyTwilioSignature, async (req, res) => {
-  // Twilio expects a 200 response quickly — acknowledge immediately
-  res.status(200).send('<Response></Response>');
- 
   const body = req.body;
   const from = body.From; // e.g. "whatsapp:+61412345678"
   const messageBody = (body.Body || '').trim();
@@ -23,34 +21,17 @@ router.post('/whatsapp', verifyTwilioSignature, async (req, res) => {
   // Declare upperMsg once, here, so all handlers below can use it
   const upperMsg = messageBody.toUpperCase();
  
-  console.log(`[webhook] Inbound from ${from} | media: ${numMedia} | text: "${messageBody}"`);
+  // Opt-outs are acknowledged only after durable suppression succeeds.
+  if (['STOP','STOP ALL','STOPALL','UNSUBSCRIBE','CANCEL','END','QUIT','REVOKE','OPTOUT'].includes(upperMsg)) {
+    try {
+      await processInboundSms({messageSid:body.MessageSid,from:(from||'').replace('whatsapp:',''),to:(body.To||'').replace('whatsapp:',''),body:upperMsg});
+      return res.type('text/xml').send('<Response/>');
+    } catch { return res.status(503).send('Suppression persistence unavailable'); }
+  }
+  res.status(200).send('<Response></Response>');
+  console.log('[webhook] Inbound WhatsApp event');
  
   try {
-    // 1. STOP handler — Australian Spam Act compliance
-    // Must run before identifySender so opt-outs always succeed
-    if (upperMsg === 'STOP' || upperMsg === 'STOP ALL' || upperMsg === 'UNSUBSCRIBE') {
-      const { createClient } = require('@supabase/supabase-js');
-      const supabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      );
-      const cleanPhone = from.replace('whatsapp:', '');
-      const { error } = await supabase
-        .from('suppressed_contacts')
-        .upsert({
-          phone: cleanPhone,
-          client_id: null, // unknown at this point — intentional
-          reason: 'STOP',
-          suppressed_at: new Date().toISOString(),
-        }, { onConflict: 'phone' });
- 
-      if (error) console.error('[stop] Failed to write suppression:', error.message);
-      else console.log('[stop] Suppressed:', cleanPhone);
- 
-      // Don't reply — Twilio handles the opt-out confirmation automatically
-      return;
-    }
- 
     // 2. Identify sender
     const senderResult = await identifySender(from);
  

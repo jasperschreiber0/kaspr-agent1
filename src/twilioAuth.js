@@ -10,9 +10,10 @@ const twilio = require('twilio');
  */
 function verifyTwilioSignature(req, res, next) {
   const signature = req.headers['x-twilio-signature'];
-  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+  const base = process.env.PUBLIC_BASE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : `${req.protocol}://${req.get('host')}`);
+  const url = `${base.replace(/\/$/,'')}${req.originalUrl}`;
 
-  const valid = twilio.validateRequest(
+  const valid = typeof signature === 'string' && twilio.validateRequest(
     process.env.TWILIO_AUTH_TOKEN,
     signature,
     url,
@@ -20,7 +21,7 @@ function verifyTwilioSignature(req, res, next) {
   );
 
   if (!valid) {
-    console.warn(`[twilio-auth] Rejected unsigned/invalid request to ${url}`);
+    console.warn('[twilio-auth] Rejected unsigned/invalid request');
     return res.status(403).send('Forbidden');
   }
 

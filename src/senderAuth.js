@@ -26,7 +26,7 @@ async function identifySender(twilioFrom) {
     throw new Error('DB lookup failed');
   }
 
-  if (!clients || clients.length === 0) {
+  if (!clients || clients.length !== 1) {
     return null;
   }
 

@@ -53,8 +53,8 @@ app.use(express.json({
 
 app.get('/health', async (req, res) => {
   const db = require('@supabase/supabase-js').createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-  const { data, error } = await db.rpc('kaspr_recovery_version');
-  const healthy = !error && data === 2 && workerHealthy();
+  const { data, error } = await db.rpc('kaspr_foundation_version');
+  const healthy = !error && data === 3 && workerHealthy();
   res.status(healthy ? 200 : 503).json({ status: healthy ? 'ok' : 'not_ready', agent: 'kaspr-agent1', schema: data, commit: process.env.RAILWAY_GIT_COMMIT_SHA || 'local', worker: workerHealthy() });
 });
 

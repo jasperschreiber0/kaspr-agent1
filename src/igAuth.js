@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const { tenantAuth } = require('./tenantAuth');
 const { createClient } = require('@supabase/supabase-js');
  
 const supabase = createClient(
@@ -38,14 +39,16 @@ function pruneStaleStates() {
  * directly as state, so the callback can't be tricked into binding a
  * token to an arbitrary client row.
  */
-router.get('/connect', (req, res) => {
+router.get('/connect', tenantAuth(supabase), (req, res) => {
   const clientId = req.query.client_id;
   if (!clientId) {
     return res.status(400).send('Missing client_id');
   }
 
   const state = crypto.randomBytes(16).toString('hex');
-  stateStore.set(state, { clientId, createdAt: Date.now() });
+  const binding = crypto.randomBytes(32).toString('hex');
+  stateStore.set(state, { clientId, userId:req.tenantUser, binding, createdAt: Date.now() });
+  res.cookie('kaspr_ig_binding',binding,{httpOnly:true,secure:true,sameSite:'lax',path:'/auth/instagram',maxAge:600000});
   pruneStaleStates();
  
   const url = new URL('https://www.facebook.com/v19.0/dialog/oauth');
@@ -72,8 +75,7 @@ router.get('/callback', async (req, res) => {
   const { code, state, error, error_description } = req.query;
  
   if (error) {
-    console.error('[ig-auth] OAuth error:', error, error_description);
-    return res.status(400).send(`OAuth error: ${error_description || error}`);
+    return res.status(400).send('OAuth authorization declined');
   }
  
   if (!code || !state) {
@@ -81,13 +83,17 @@ router.get('/callback', async (req, res) => {
   }
 
   const stateData = stateStore.get(state);
-  if (!stateData) {
+  const binding = (req.headers.cookie || '').split(';').map(s=>s.trim()).find(s=>s.startsWith('kaspr_ig_binding='))?.slice('kaspr_ig_binding='.length);
+  if (!stateData || Date.now()-stateData.createdAt>600000 || binding!==stateData.binding) {
     return res.status(400).send('Invalid or expired state. Please start the auth flow again.');
   }
   stateStore.delete(state);
+  res.clearCookie('kaspr_ig_binding',{httpOnly:true,secure:true,sameSite:'lax',path:'/auth/instagram'});
   const clientId = stateData.clientId;
  
   try {
+    const membership = await supabase.from('tenant_memberships').select('client_id').eq('user_id',stateData.userId).eq('client_id',clientId).maybeSingle();
+    if(membership.error || !membership.data) return res.status(403).send('Authorization no longer valid');
     // Step 1: Exchange code for short-lived token
     const tokenRes = await fetch('https://graph.facebook.com/v19.0/oauth/access_token', {
       method: 'POST',
@@ -188,14 +194,14 @@ router.get('/callback', async (req, res) => {
       </html>
     `);
   } catch (err) {
-    console.error('[ig-auth] Error:', err.message);
+    console.error('[ig-auth] Connection failed');
     res.status(500).send(`
       <!DOCTYPE html>
       <html>
         <head><title>Error — Kaspr</title></head>
         <body style="font-family: sans-serif; padding: 40px; text-align: center;">
           <h2>Something went wrong</h2>
-          <p>${err.message}</p>
+          <p>Connection failed. Please restart the authorised connection process.</p>
           <p>Please contact hello@kaspr.com.au</p>
         </body>
       </html>

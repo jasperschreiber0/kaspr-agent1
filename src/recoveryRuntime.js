@@ -9,14 +9,20 @@ function createRecoveryRuntime({ db, sendSms, fetchMessage, autoReply = false, c
     if (!autoReply) return false;
     const item = (await rpc('kaspr_claim_inbox'))?.[0];
     if (!item) return false;
+    try {
     const { data: thread, error } = await db.from('recovery_threads').select('*,clients(business_name,recovery_services,booking_url)').eq('id', item.thread_id).single();
     if (error) throw error;
     const client = thread.clients;
     const reply = replyFor({ businessName: client.business_name, services: servicesOf(client.recovery_services), bookingUrl: client.booking_url, text: item.body, state: thread.state });
     await rpc('kaspr_finish_reply', { p_id: item.id, p_lease: item.lease_until, p_state: reply.state, p_service: reply.service || thread.service, p_time: thread.state === 'time' ? item.body : thread.preferred_time, p_summary: `Service: ${reply.service || thread.service || 'unknown'}; request: ${item.body}`, p_reply: reply.body });
     return true;
+    } catch (error) {
+      await rpc('kaspr_fail_inbox', { p_id: item.id, p_lease: item.lease_until });
+      throw error;
+    }
   }
   async function processOne() {
+    if ((await rpc('kaspr_recovery_metrics'))?.paused) return false;
     const item = (await rpc('kaspr_claim_outbox'))?.[0];
     if (!item) return false;
     const { data: client, error } = await db.from('clients').select('recovery_sms_number').eq('id', item.client_id).single();
@@ -24,7 +30,7 @@ function createRecoveryRuntime({ db, sendSms, fetchMessage, autoReply = false, c
       await rpc('kaspr_fail_send', { p_id: item.id, p_outcome: 'retry', p_code: 'database_lookup' });
       throw error;
     }
-    const result = await sendSms(item.phone, item.body, { from: client.recovery_sms_number, statusCallback: `${callbackBase}/webhook/sms-status?outboxId=${item.id}` });
+    const result = await sendSms(item.phone, item.body, { from: client.recovery_sms_number, statusCallback: `${callbackBase}/webhook/sms-status?outboxId=${item.id}`, authorize: () => rpc('kaspr_authorize_send', { p_id: item.id, p_claimed: item.claimed_at }) });
     if (!result.sent) {
       await rpc('kaspr_fail_send', { p_id: item.id, p_outcome: result.outcome || 'uncertain', p_code: result.code || result.reason || 'unknown' });
       logger.warn(`[recovery-worker] outcome=${result.outcome || 'uncertain'} outbox=${item.id} attempt=${item.attempts}`);
@@ -38,10 +44,12 @@ function createRecoveryRuntime({ db, sendSms, fetchMessage, autoReply = false, c
     const { data, error } = await db.from('recovery_outbox').select('id,provider_sid').eq('status', 'sent').not('provider_sid', 'is', null).or('delivery_status.is.null,delivery_status.in.(accepted,queued,sending,sent)').order('reconciled_at', { ascending: true, nullsFirst: true }).limit(5);
     if (error) throw error;
     for (const item of data) {
+      try {
       const message = await fetchMessage(item.provider_sid);
       await rpc('kaspr_delivery_status', { p_id: item.id, p_sid: message.sid, p_status: message.status, p_error: message.errorCode ? String(message.errorCode) : null });
+      } catch { logger.warn('[recovery-worker] reconciliation_failed'); }
     }
   }
-  return { processOne, processInbox, reconcile, queueReviews: () => rpc('kaspr_queue_reviews') };
+  return { processOne, processInbox, reconcile, metrics: () => rpc('kaspr_recovery_metrics'), queueReviews: () => rpc('kaspr_queue_reviews') };
 }
 module.exports = { createRecoveryRuntime };

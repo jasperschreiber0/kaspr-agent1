@@ -10,6 +10,9 @@ async function sendSms(to, body, options = {}) {
   if (await isSuppressed(to)) return { sent: false, outcome: 'suppressed', reason: 'suppressed_or_unavailable' };
   const from = options.from || process.env.TWILIO_SMS_NUMBER;
   if (!from) return { sent: false, outcome: 'failed', reason: 'sender_not_configured' };
+  // Last awaited operation before transport: fail closed if the lease, takeover,
+  // pause, opt-out or message freshness changed since this work was claimed.
+  if (options.authorize && !await options.authorize()) return { sent: false, outcome: 'suppressed', reason: 'send_gate' };
   try {
     const message = await twilioClient.messages.create({ from, to, body, ...(options.statusCallback ? { statusCallback: options.statusCallback } : {}) });
     return { sent: true, sid: message.sid };

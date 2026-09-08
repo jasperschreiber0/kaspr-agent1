@@ -54,6 +54,12 @@ try {
  await q("update recovery_outbox set claimed_at=now()-interval '6 minutes' where id=$1",[crash.id]);
  assert.equal((await first('select count(*)::int n from kaspr_claim_outbox()')).n,0);
  assert.equal((await first('select status from recovery_outbox where id=$1',[crash.id])).status,'uncertain');
+ // Same non-opted-out caller, different call SID: uncertain original blocks
+ // another recovery SMS, independently of webhook event deduplication.
+ await q("select kaspr_capture_missed_call('CA-repeat','+15005550006','+15005550008','no-answer')");
+ await q("update recovery_outbox set available_at=now() where dedupe_key='call:CA-repeat'");
+ await q('select kaspr_claim_outbox()');
+ assert.equal((await first("select status from recovery_outbox where dedupe_key='call:CA-repeat'")).status,'suppressed');
  await q("select kaspr_booking_transition($1,$2,'appointment_booked','LOCAL-BOOKING',280)",[o.opportunity_id,c.id]);
  await q("select kaspr_booking_transition($1,$2,'appointment_completed','LOCAL-BOOKING',280)",[o.opportunity_id,c.id]);
  await q("insert into revenue_events(opportunity_id,client_id,event_name,created_at) values($1,$2,'appointment_completed',now()-interval '25 hours')",[o.opportunity_id,c.id]);

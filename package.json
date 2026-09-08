@@ -8,7 +8,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "node --test",
-    "test:database": "node scripts/verify-recovery.mjs && node scripts/verify-rls.mjs"
+    "test:database": "node scripts/verify-recovery.mjs && node scripts/verify-rls.mjs && node scripts/verify-cancellation.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
@@ -24,5 +24,8 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8"
+  },
+  "overrides": {
+    "qs": "6.16.0"
   }
 }
