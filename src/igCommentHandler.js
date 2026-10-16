@@ -1,6 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { sendIgDm } = require('./igDmHandler'); // sendIgDm now lives in igDmHandler
 const { logConversationEvent } = require('./conversationLog');
+const { isIgDmBlocked } = require('./igDmPolicy');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 /**
@@ -11,6 +12,10 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
  * @param {object} value  - Meta webhook change value
  */
 async function handleComment({ client, value }) {
+  if (isIgDmBlocked(client.instagram_account_id)) {
+    console.log(`[comment] Automated DMs disabled for IG account ${client.instagram_account_id}`);
+    return;
+  }
   const receivedAt = new Date();
   try {
     const commentId = value.id;

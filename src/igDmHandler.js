@@ -1,5 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { logConversationEvent } = require('./conversationLog');
+const { isIgDmBlocked } = require('./igDmPolicy');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 /**
@@ -10,6 +11,10 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
  * @param {object} value  - Meta webhook change value (messages field or messaging array entry)
  */
 async function handleDm({ client, value }) {
+  if (isIgDmBlocked(client.instagram_account_id)) {
+    console.log(`[dm] Automated DMs disabled for IG account ${client.instagram_account_id}`);
+    return;
+  }
   const receivedAt = new Date();
   try {
     const messaging = value.messaging || buildMessagingFromChange(value);
@@ -108,6 +113,9 @@ Write ONLY the reply message. No quotes, no explanation, no label. Just the mess
  * Uses the IG account ID directly (not /me/) to avoid User token issues.
  */
 async function sendIgDm({ igAccountId, accessToken, recipientId, message }) {
+  if (isIgDmBlocked(igAccountId)) {
+    throw new Error('Automated DMs disabled for this Instagram account');
+  }
   const url = `https://graph.facebook.com/v19.0/${igAccountId}/messages`;
  
   const res = await fetch(url, {
